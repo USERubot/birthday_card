@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Birthday Wishes Stack</title>
+
+    <!-- Google Fonts: Great Vibes & Montserrat -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        :root {
+            --bg-gradient-start: #fbc2eb;
+            --bg-gradient-end: #a6c1ee;
+            --bg-dark: #1a1a2e; /* Dark background for final state */
+            --card-bg: #fff8e1;
+            --card-bg-transparent: rgba(255, 248, 225, 0.95);
+            --card-shadow: rgba(0, 0, 0, 0.15);
+            --card-shadow-hover: rgba(0, 0, 0, 0.25);
+            --text-color: #4a4a4a;
+            --heading-color: #e91e63;
+            --cover-bg: #ff80ab;
+            --cover-text: white;
+            --dismissed-opacity: 0.95;
+            --dismissed-scale: 0.88;
+            --button-bg: #ff69b4;
+            --button-text: white;
+            --button-shadow: rgba(0,0,0,0.2);
+            --glow-color: rgba(255, 255, 150, 0.8); /* Yellowish glow */
+            /* Removed --player-bg and --player-text */
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+            font-family: 'Montserrat', sans-serif;
+            display: flex;
+            flex-direction: column; /* Allow stacking */
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden; /* Hide scrollbars */
+            position: relative;
+            padding: 20px;
+            /* Smooth background transition */
+            transition: background 1.5s ease-in-out;
+        }
+
+        /* Floating elements container (hearts/stars) */
+        #floating-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        .floating {
+            position: absolute;
+            width: 25px; height: 25px;
+            background-size: contain; background-repeat: no-repeat;
+            opacity: 0;
+            animation: floatUp linear infinite;
+            pointer-events: none;
+            bottom: -50px;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(0.5) rotate(-10deg); opacity: 0.7; }
+            50% { transform: translateY(-60vh) scale(1) rotate(10deg); opacity: 0.9; }
+            100% { transform: translateY(-110vh) scale(0.8) rotate(-5deg); opacity: 0; }
+        }
+
+        /* Emoji Rain Container */
+        #emoji-rain-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 150; /* Above dark bg, below confetti */
+            overflow: hidden;
+        }
+
+        .emoji-fall {
+            position: absolute;
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            user-select: none;
+            animation: fallDown linear forwards; /* Removed infinite */
+            top: -50px; /* Start above screen */
+            opacity: 1;
+            will-change: transform, opacity;
+        }
+
+        @keyframes fallDown {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        }
+
+        /* Container for the stack */
+        #stack-area {
+            position: relative;
+            width: 100%;
+            max-width: 380px;
+            aspect-ratio: 3 / 4.2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-shrink: 0; /* Prevent shrinking */
+            margin-bottom: 20px; /* Original space */
+        }
+
+        /* Card Stack */
+        .card-stack {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            perspective: 1500px;
+            z-index: 10;
+        }
+
+        /* Individual Page/Card Styling */
+        .page {
+            width: 100%; height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+            background: var(--card-bg);
+            padding: clamp(25px, 6vw, 40px);
+            border-radius: 18px;
+            box-shadow: 0 6px 18px var(--card-shadow);
+            cursor: grab;
+            user-select: none;
+            transform-origin: center center;
+            transition: transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.6s ease, box-shadow 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            overflow: hidden;
+            will-change: transform, opacity;
+            backface-visibility: hidden;
+            opacity: 0;
+            transform: translateY(20px) scale(0.97);
+            z-index: 5;
+        }
+        .page:not(.is-dismissed-left):not(.is-dismissed-right) { z-index: 10; }
+
+        @keyframes pageEnter {
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .page.is-visible:not(.is-dismissed-left):not(.is-dismissed-right) {
+            animation: pageEnter 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+        .page.is-dismissed-left, .page.is-dismissed-right { opacity: var(--dismissed-opacity); }
+
+        /* Cover specific styles */
+        .cover {
+            background: var(--cover-bg); color: var(--cover-text);
+            font-family: 'Great Vibes', cursive;
+            font-size: clamp(2.2em, 6.5vw, 3em); font-weight: bold;
+            box-shadow: 0 10px 30px var(--card-shadow-hover);
+            text-shadow: 1px 1px 4px rgba(0,0,0,0.2); justify-content: center;
+        }
+        .cover div:first-child { font-size: clamp(3.5em, 13vw, 5.5em); margin-bottom: 0.15em; line-height: 1; }
+
+        /* Headings, Paragraphs, Final Text, Image - Unchanged */
+        .page h1 { font-family: 'Great Vibes', cursive; color: var(--heading-color); margin-top: 0; margin-bottom: 0.5em; font-size: clamp(2.2em, 7.5vw, 3em); text-shadow: 1px 1px 3px rgba(0,0,0,0.1); line-height: 1.2; }
+        .page p { font-family: 'Montserrat', sans-serif; font-size: clamp(0.95em, 3.2vw, 1.15em); line-height: 1.65; color: var(--text-color); margin-top: 0.5em; margin-bottom: 1em; max-width: 95%; }
+        .final-text { font-family: 'Great Vibes', cursive; font-size: clamp(1.6em, 5.5vw, 2.2em); color: var(--heading-color); font-weight: bold; margin-top: 0; margin-bottom: 0.8em; line-height: 1.35; }
+        #last-page { justify-content: flex-start; padding-top: clamp(35px, 9vw, 55px); cursor: default !important; }
+        .final-image { display: block; width: 85%; max-width: 280px; height: auto; border-radius: 12px; margin-top: clamp(18px, 4.5vw, 28px); box-shadow: 0 5px 15px rgba(0,0,0,0.25); }
+
+        /* --- Interaction States --- */
+        .page.is-dragging { cursor: grabbing; box-shadow: 0 12px 35px var(--card-shadow-hover); z-index: 100 !important; }
+        .page.is-interactive:not(.is-dragging):hover { transform: translateY(-6px) scale(1.03); box-shadow: 0 14px 35px var(--card-shadow-hover); background-color: var(--card-bg-transparent); z-index: 11; }
+
+        /* --- DISMISSED STATES --- */
+        .page.is-dismissed-left, .page.is-dismissed-right {
+            cursor: default; pointer-events: none;
+            opacity: var(--dismissed-opacity) !important;
+            transition: transform 0.7s cubic-bezier(0.32, 0.94, 0.6, 1), opacity 0.7s ease-out;
+            position: absolute;
+            z-index: 5 !important;
+        }
+
+        /* --- LAST PAGE GLOW --- */
+        #last-page.glow-effect {
+            box-shadow: 0 0 18px 6px var(--glow-color), 0 0 35px 12px var(--glow-color);
+            /* Optional subtle pulse animation */
+             animation: pulseGlow 2s infinite alternate ease-in-out;
+             /* Make sure it's visible above potentially darkened background elements */
+             z-index: 12 !important;
+        }
+        @keyframes pulseGlow {
+            from { box-shadow: 0 0 15px 4px var(--glow-color), 0 0 25px 8px var(--glow-color); }
+            to   { box-shadow: 0 0 22px 7px var(--glow-color), 0 0 40px 15px var(--glow-color); }
+        }
+
+
+        /* Instruction Text */
+        .instructions {
+            position: fixed; bottom: 100px; /* Raised slightly */
+            left: 50%; transform: translateX(-50%);
+            color: rgba(0, 0, 0, 0.65);
+            font-family: 'Montserrat', sans-serif;
+            font-size: clamp(0.85em, 2.8vw, 1em);
+            z-index: 101;
+            background-color: rgba(255, 255, 255, 0.5);
+            padding: 8px 18px; border-radius: 25px;
+            transition: opacity 0.5s ease; pointer-events: none;
+            text-align: center;
+        }
+        .instructions.is-hidden { opacity: 0; }
+
+        /* Reset Button */
+        #reset-button {
+            position: fixed; bottom: 20px; /* Default position */
+            left: 50%; transform: translateX(-50%);
+            padding: 12px 25px;
+            font-family: 'Montserrat', sans-serif; font-size: 1em; font-weight: bold;
+            color: var(--button-text); background-color: var(--button-bg);
+            border: none; border-radius: 30px; cursor: pointer;
+            box-shadow: 0 4px 10px var(--button-shadow);
+            z-index: 101;
+            transition: background-color 0.3s ease, transform 0.2s ease, opacity 0.5s ease, bottom 0.5s ease;
+            opacity: 0; pointer-events: none;
+            animation: buttonFadeIn 0.5s ease 1s forwards;
+        }
+         /* Removed rule that moved reset button up for music player */
+
+        #reset-button:hover { background-color: #d63384; }
+        #reset-button:active { transform: translateX(-50%) scale(0.95); }
+        @keyframes buttonFadeIn { to { opacity: 1; pointer-events: auto; } }
+
+        /* Confetti Canvas Styling */
+        #confetti-canvas {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; z-index: 200; /* Highest */
+        }
+
+        /* Removed Music Player CSS Rules */
+
+    </style>
+</head>
+<body>
+
+    <!-- Container to center the stack and provide context -->
+    <div id="stack-area">
+        <!-- Card Stack Container -->
+        <div class="card-stack" id="card-stack">
+            <!-- Page Content -->
+            <div class="page cover" data-page-index="0">
+                <div style="font-size: clamp(3.5em, 13vw, 5.5em);">💖</div>
+                <div>🎂 Birthday Wishes 🎉</div>
+            </div>
+            <div class="page" data-page-index="1">
+                <h1>🎉 Happy Birthday!</h1>
+                <p>Today is all about celebrating YOU! Wishing you a day filled with joy, laughter, and everything that makes you smile.</p>
+            </div>
+            <div class="page" data-page-index="2">
+                <h1>💖 A Special Wish</h1>
+                <p>May this new year of your life be even more amazing than the last. Sending you loads of love and happiness.</p>
+            </div>
+            <div class="page" data-page-index="3">
+                <h1>✨ Cheers to You!</h1>
+                <p>Here's to another trip around the sun! May it be your best one yet, filled with exciting adventures and cherished moments.</p>
+            </div>
+            <div class="page" data-page-index="4">
+                <h1>💌 Final Thoughts</h1>
+                <p>As it's your birthday, on this special occasion, I just want to say I do love you from from the top to bottom, every part of my heart. I can't say we could be together for life, but the moments we will create will be the most special one....</p>
+            </div>
+            <!-- Last page -->
+            <div class="page" id="last-page" data-page-index="5">
+                <div class="final-text">
+                    Wishing you the happiest birthday, Cutie Pie!
+                </div>
+                <img src="image.jpg" alt="Birthday Surprise!" class="final-image">
+                <p style="font-size: 0.9em; margin-top: 15px; color: #666;">Hope you liked this little surprise!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating elements container -->
+    <div id="floating-container"></div>
+
+    <!-- Emoji Rain container -->
+    <div id="emoji-rain-container"></div>
+
+    <!-- Instructions -->
+    <div class="instructions" id="instructions">Drag the cards left or right!</div>
+
+    <!-- Music Player HTML Removed -->
+
+    <!-- Reset Button -->
+    <button id="reset-button">Reset Stack</button>
+
+    <!-- Canvas for Confetti -->
+    <canvas id="confetti-canvas"></canvas>
+
+    <script>
+        const stackArea = document.getElementById('stack-area');
+        const stackContainer = document.getElementById('card-stack');
+        const pages = Array.from(stackContainer.querySelectorAll(".page"));
+        const instructions = document.getElementById('instructions');
+        const floatingContainer = document.getElementById('floating-container');
+        const emojiRainContainer = document.getElementById('emoji-rain-container');
+        const resetButton = document.getElementById('reset-button');
+        const confettiCanvas = document.getElementById('confetti-canvas');
+        const lastPageElement = document.getElementById('last-page');
+        // Removed music player element variables
+
+        const totalPages = pages.length;
+        const lastPageIndex = totalPages - 1;
+
+        let currentPageIndex = 0;
+        let isDragging = false;
+        let startX, startY, currentX, currentY;
+        let currentDraggedElement = null;
+        let stackAreaRect;
+
+        let dismissedLeftCount = 0;
+        let dismissedRightCount = 0;
+        const STACK_VERTICAL_OFFSET_Y = 30;
+        const STACK_HORIZONTAL_OFFSET_X = 5;
+        const STACK_ROTATION_OFFSET = 1.5;
+        const BASE_ROTATION = 8;
+        const BASE_HORIZONTAL_DISTANCE_FACTOR = 0.65;
+
+        const myConfetti = confetti.create(confettiCanvas, {
+            resize: true, useWorker: true
+        });
+        let celebrationActive = false; // Flag for all final effects
+        let emojiRainInterval = null;
+
+        // --- Audio Setup & Visualizer Removed ---
+
+        // --- Floating Elements (Hearts/Stars) ---
+        function createFloatingElements() { /* ... unchanged ... */
+            floatingContainer.innerHTML = ''; // Clear existing
+            const numFloating = 25;
+            const icons = ['https://cdn-icons-png.flaticon.com/512/833/833472.png','https://cdn-icons-png.flaticon.com/512/1828/1828970.png','https://cdn-icons-png.flaticon.com/512/4599/4599105.png','https://cdn-icons-png.flaticon.com/512/1164/1164605.png'];
+            for (let i = 0; i < numFloating; i++) {
+                const floating = document.createElement('div');
+                floating.classList.add('floating');
+                floating.style.backgroundImage = `url('${icons[Math.floor(Math.random() * icons.length)]}')`;
+                floating.style.left = Math.random() * 100 + "vw";
+                const duration = (10 + Math.random() * 10);
+                floating.style.animationDuration = duration + "s";
+                floating.style.animationDelay = Math.random() * duration + "s";
+                const size = (15 + Math.random() * 15);
+                floating.style.width = floating.style.height = size + "px";
+                floatingContainer.appendChild(floating);
+            }
+        }
+
+        // --- Emoji Rain ---
+        function startEmojiRain(durationSeconds = 8) {
+            const emojis = ['💖', '🎉', '✨', '🎂', '🥳', '🎈', '🎁', '🌟', '😍'];
+            const containerWidth = emojiRainContainer.clientWidth;
+            const spawnRate = 150; // Milliseconds between spawns
+
+            stopEmojiRain(); // Clear any previous interval
+
+            emojiRainInterval = setInterval(() => {
+                const emoji = document.createElement('span');
+                emoji.classList.add('emoji-fall');
+                emoji.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                emoji.style.left = Math.random() * containerWidth + 'px';
+                const fallDuration = (4 + Math.random() * 4); // 4-8 seconds to fall
+                emoji.style.animationDuration = fallDuration + 's';
+                emojiRainContainer.appendChild(emoji);
+
+                // Remove emoji element after animation finishes to prevent buildup
+                emoji.addEventListener('animationend', () => {
+                    emoji.remove();
+                });
+
+            }, spawnRate);
+
+            // Stop spawning after the specified duration
+            setTimeout(stopEmojiRain, durationSeconds * 1000);
+        }
+
+        function stopEmojiRain() {
+            if (emojiRainInterval) {
+                clearInterval(emojiRainInterval);
+                emojiRainInterval = null;
+            }
+            // Emojis currently falling will finish their animation and remove themselves
+        }
+
+        // --- Image Error Handling --- (Unchanged)
+        const finalImage = document.querySelector('#last-page .final-image');
+        if (finalImage) {
+            finalImage.onerror = () => {
+                console.error(`Error loading image: ${finalImage.src}`);
+                const errorContainer = finalImage.parentNode;
+                const existingError = errorContainer.querySelector('.image-error-message');
+                if (existingError) existingError.remove();
+                const errorText = document.createElement('p');
+                errorText.textContent = `(Oops! Couldn't load image)`;
+                errorText.style.color = 'red'; errorText.style.fontSize = '0.8em'; errorText.style.marginTop = '10px';
+                errorText.classList.add('image-error-message');
+                errorContainer.insertBefore(errorText, finalImage.nextSibling);
+                finalImage.style.display = 'none';
+            };
+            const imgPreload = new Image(); imgPreload.src = finalImage.src;
+        }
+
+
+        // --- Card Stack Logic ---
+        function initializeStack() {
+            console.log("Initializing stack...");
+            stackAreaRect = stackArea.getBoundingClientRect();
+
+            dismissedLeftCount = 0;
+            dismissedRightCount = 0;
+            celebrationActive = false;
+            myConfetti.reset();
+            stopEmojiRain(); // Stop rain
+            emojiRainContainer.innerHTML = ''; // Clear any remaining rain elements immediately
+
+            // --- Removed Audio/Visualizer Reset Logic ---
+
+            let currentColor = [255, 255, 150]; // Start color (yellowish)
+            let targetColor = getRandomRGB();
+            const transitionSpeed = 0.05; // Smaller = slower fade
+
+            function getRandomRGB() {
+                return [
+                    Math.floor(Math.random() * 256),
+                    Math.floor(Math.random() * 256),
+                    Math.floor(Math.random() * 256)
+                ];
+            }
+
+            function lerp(a, b, t) {
+                return a + (b - a) * t;
+            }
+
+            function updateGlowColor() {
+                // Lerp towards the target color
+                currentColor = [
+                    lerp(currentColor[0], targetColor[0], transitionSpeed),
+                    lerp(currentColor[1], targetColor[1], transitionSpeed),
+                    lerp(currentColor[2], targetColor[2], transitionSpeed)
+                ];
+
+                const colorString = `rgba(${currentColor[0]}, ${currentColor[1]}, ${currentColor[2]}, 0.8)`;
+                document.body.style.setProperty('--glow-color', colorString);
+
+                // If close enough to target, pick a new random color
+                if (Math.abs(currentColor[0] - targetColor[0]) < 5 &&
+                    Math.abs(currentColor[1] - targetColor[1]) < 5 &&
+                    Math.abs(currentColor[2] - targetColor[2]) < 5) {
+                    targetColor = getRandomRGB();
+                }
+
+                requestAnimationFrame(updateGlowColor);
+            }
+
+            updateGlowColor();
+
+            pages.forEach((page, index) => {
+                const baseZIndex = (index === lastPageIndex) ? 9 : 10;
+                page.style.zIndex = baseZIndex;
+                page.style.transform = `translateY(20px) scale(0.97)`;
+                page.style.opacity = '0';
+                page.style.transition = '';
+                page.style.animationDelay = `${index * 0.1}s`;
+                page.classList.remove(
+                    'is-visible', 'is-interactive', 'is-dismissed-left',
+                    'is-dismissed-right', 'is-dragging', 'glow-effect' // Remove glow
+                );
+                page.style.removeProperty('transform');
+            });
+
+            // Reset background and body class
+            document.body.style.background = ''; // Let CSS default take over
+            document.body.classList.remove('final-state');
+
+            const errorMsg = document.querySelector('.image-error-message');
+            if(errorMsg) errorMsg.remove();
+            if(finalImage) finalImage.style.display = 'block';
+
+            currentPageIndex = 0;
+
+            if (pages.length > 0) {
+               makePageInteractive(currentPageIndex);
+               pages[lastPageIndex].classList.add('is-visible');
+               pages[lastPageIndex].style.opacity = '1';
+               pages[lastPageIndex].style.transform = 'translateY(0) scale(1)';
+            } else {
+                if (instructions) instructions.classList.add('is-hidden');
+            }
+
+            if (instructions) instructions.classList.remove('is-hidden');
+            createFloatingElements();
+            console.log("Stack initialized.");
+        }
+
+        function makePageInteractive(index) {
+            if (index === lastPageIndex) {
+                console.log("Reached last page, interaction stopped.");
+                if (instructions) instructions.classList.add('is-hidden');
+                 // Final reveal logic is now in proceedToNextPage
+                return;
+            }
+
+            if (index >= 0 && index < totalPages) {
+                const page = pages[index];
+                if (!page.classList.contains('is-dismissed-left') && !page.classList.contains('is-dismissed-right')) {
+                    setTimeout(() => {
+                        page.style.zIndex = 10 + (totalPages - index);
+                        page.classList.add('is-visible');
+                        page.classList.add('is-interactive');
+                        addDragListeners(page);
+                    }, 50);
+                }
+                // Show next card(s) for stack effect
+                if (index + 1 < lastPageIndex) { /* ...unchanged... */
+                    const nextPage = pages[index + 1];
+                     if (!nextPage.classList.contains('is-dismissed-left') && !nextPage.classList.contains('is-dismissed-right')) {
+                         nextPage.classList.add('is-visible');
+                         nextPage.style.transform = `translateY(8px) scale(0.98)`;
+                         nextPage.style.opacity = '1';
+                         nextPage.style.zIndex = 10 + (totalPages - (index+1));
+                     }
+                 }
+                 if (index + 2 < lastPageIndex) { /* ...unchanged... */
+                     const thirdPage = pages[index + 2];
+                     if (!thirdPage.classList.contains('is-dismissed-left') && !thirdPage.classList.contains('is-dismissed-right')) {
+                         thirdPage.classList.add('is-visible');
+                         thirdPage.style.transform = `translateY(16px) scale(0.96)`;
+                         thirdPage.style.opacity = '1';
+                         thirdPage.style.zIndex = 10 + (totalPages - (index+2));
+                     }
+                 }
+            }
+        }
+
+        // --- triggerCelebration Function (Fireworks, Sparkles, Less Confetti) ---
+        function triggerCelebration() {
+            if (celebrationActive) return;
+            celebrationActive = true; // Use this flag for all final effects
+            console.log("✨ FINAL REVEAL! ✨");
+
+            const duration = 6 * 1000; // 6 seconds total celebration
+            const animationEnd = Date.now() + duration;
+
+            // --- Fireworks ---
+            function launchFirework() {
+                const originX = Math.random();
+                const originY = Math.random() * 0.3 + 0.7; // Launch from bottom area
+
+                myConfetti({
+                    particleCount: 50, // Fewer particles for the trail
+                    angle: 90,
+                    spread: 55,
+                    startVelocity: 55,
+                    origin: { x: originX, y: originY },
+                    scalar: 0.8,
+                    gravity: 0.6,
+                    ticks: 150, // Longer trail life
+                    colors: ['#FFFFFF', '#FFD700']
+                });
+
+                // Explosion after a delay
+                setTimeout(() => {
+                    myConfetti({
+                        particleCount: 100,
+                        angle: Math.random() * 60 + 60, // Random angle upwards
+                        spread: Math.random() * 100 + 120, // Wider spread
+                        startVelocity: 35,
+                        decay: 0.92, // Faster fade
+                        gravity: 0.5,
+                        origin: { x: originX, y: originY - 0.2 }, // Explode slightly higher
+                        colors: ['#FF0000', '#FFFF00', '#00FF00', '#00FFFF', '#FF00FF', '#FFFFFF'],
+                        scalar: Math.random() * 0.5 + 0.8 // Random size
+                    });
+                }, 600 + Math.random() * 400); // Delay explosion
+            }
+
+            // --- Sparkles ---
+            function createSparkles() {
+                const defaults = {
+                    spread: 360,
+                    ticks: 50,
+                    gravity: 0,
+                    decay: 0.96,
+                    startVelocity: 20,
+                    shapes: ['star'],
+                    colors: ['#FFE400', '#FFD700', '#FFFACD', '#FFFFFF']
+                };
+                myConfetti({ ...defaults, particleCount: 30, scalar: 1.2, origin: { x: Math.random(), y: Math.random() - 0.2 } });
+                myConfetti({ ...defaults, particleCount: 15, scalar: 0.75, origin: { x: Math.random(), y: Math.random() + 0.1 } });
+            }
+
+            // --- Limited Confetti ---
+             function rainConfetti() {
+                 myConfetti({
+                     particleCount: 30, // Reduced count
+                     angle: 270,
+                     spread: 80,
+                     origin: { x: Math.random(), y: -0.1 }, // From top
+                     colors: ['#a864fd', '#29cdff', '#78ff44', '#ff718d', '#fdff6a'],
+                     disableForReducedMotion: true
+                 });
+             }
+
+
+            // Interval to trigger effects
+            const interval = setInterval(() => {
+                const timeLeft = animationEnd - Date.now();
+                if (timeLeft <= 0) {
+                    // celebrationActive = false; // Keep true until reset now
+                    return clearInterval(interval);
+                }
+
+                // Trigger effects randomly or based on time
+                if (Math.random() < 0.15) launchFirework();
+                if (Math.random() < 0.3) createSparkles();
+                 if (Math.random() < 0.4) rainConfetti();
+
+            }, 200);
+
+            // Initial burst
+             launchFirework();
+             setTimeout(launchFirework, 300);
+             setTimeout(createSparkles, 100);
+        }
+
+        // --- Audio Visualizer Setup/Draw Removed ---
+
+        // --- Drag Listeners & Logic ---
+        function addDragListeners(element) { /* ... unchanged ... */
+             element.removeEventListener('mousedown', startDrag);
+            element.removeEventListener('touchstart', startDrag);
+            element.addEventListener('mousedown', startDrag);
+            element.addEventListener('touchstart', startDrag, { passive: true });
+        }
+        function removeDragListeners(element) { /* ... unchanged ... */
+             element.removeEventListener('mousedown', startDrag);
+            element.removeEventListener('touchstart', startDrag);
+            element.classList.remove('is-interactive');
+        }
+        function startDrag(e) { /* ... unchanged ... */
+             currentDraggedElement = e.currentTarget;
+            if (!currentDraggedElement || !currentDraggedElement.classList.contains('is-interactive') || isDragging) {
+                 currentDraggedElement = null; return;
+            }
+
+            isDragging = true;
+            currentDraggedElement.classList.add('is-dragging');
+            currentDraggedElement.style.transition = 'none';
+            startX = e.pageX || e.touches[0].pageX;
+            startY = e.pageY || e.touches[0].pageY;
+            stackAreaRect = stackArea.getBoundingClientRect();
+
+            document.addEventListener('mousemove', doDrag);
+            document.addEventListener('touchmove', doDrag, { passive: false });
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+            document.body.style.userSelect = 'none';
+            if (e.type === 'touchmove') e.preventDefault();
+        }
+        function doDrag(e) { /* ... unchanged ... */
+            if (!isDragging || !currentDraggedElement) return;
+            e.preventDefault();
+            currentX = e.pageX || e.touches[0].pageX;
+            currentY = e.pageY || e.touches[0].pageY;
+            const deltaX = currentX - startX;
+            const deltaY = currentY - startY;
+            const rotation = Math.max(-20, Math.min(20, deltaX * 0.1));
+            currentDraggedElement.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${rotation}deg)`;
+        }
+        function endDrag(e) { /* ... unchanged ... */
+            if (!isDragging || !currentDraggedElement) return;
+            isDragging = false;
+
+            document.removeEventListener('mousemove', doDrag);
+            document.removeEventListener('touchmove', doDrag);
+            document.removeEventListener('mouseup', endDrag);
+            document.removeEventListener('touchend', endDrag);
+            document.body.style.userSelect = '';
+
+            const rect = currentDraggedElement.getBoundingClientRect();
+            const threshold = rect.width * 0.45;
+            const deltaX = currentX - startX;
+
+            currentDraggedElement.style.transition = '';
+
+            if (Math.abs(deltaX) > threshold) {
+                // --- Dismiss the page ---
+                removeDragListeners(currentDraggedElement);
+                currentDraggedElement.classList.remove('is-dragging', 'is-visible');
+
+                let targetX, targetY, targetRotate, currentCount;
+                const cardWidth = stackAreaRect.width;
+                const baseHorizontalOffset = cardWidth * BASE_HORIZONTAL_DISTANCE_FACTOR;
+
+                if (deltaX < 0) { // Dragged Left
+                    dismissedLeftCount++; currentCount = dismissedLeftCount;
+                    targetY = (currentCount - 1) * STACK_VERTICAL_OFFSET_Y;
+                    targetX = -baseHorizontalOffset - ((currentCount - 1) * STACK_HORIZONTAL_OFFSET_X);
+                    targetRotate = -BASE_ROTATION - ((currentCount - 1) * STACK_ROTATION_OFFSET);
+                    currentDraggedElement.classList.add('is-dismissed-left');
+                    currentDraggedElement.style.zIndex = 5 + currentCount;
+
+                } else { // Dragged Right
+                    dismissedRightCount++; currentCount = dismissedRightCount;
+                    targetY = (currentCount - 1) * STACK_VERTICAL_OFFSET_Y;
+                    targetX = baseHorizontalOffset + ((currentCount - 1) * STACK_HORIZONTAL_OFFSET_X);
+                    targetRotate = BASE_ROTATION + ((currentCount - 1) * STACK_ROTATION_OFFSET);
+                    currentDraggedElement.classList.add('is-dismissed-right');
+                    currentDraggedElement.style.zIndex = 5 + currentCount;
+                }
+                currentDraggedElement.style.transform = `translate(${targetX}px, ${targetY}px) rotate(${targetRotate}deg) scale(var(--dismissed-scale))`;
+
+                proceedToNextPage(); // THIS IS WHERE THE MAGIC HAPPENS
+
+            } else {
+                // --- Snap back ---
+                currentDraggedElement.classList.remove('is-dragging');
+                 const currentZIndex = currentDraggedElement.style.zIndex || (10 + (totalPages - currentPageIndex));
+                 currentDraggedElement.style.zIndex = currentZIndex;
+                 currentDraggedElement.style.transform = 'translateY(0) scale(1)';
+            }
+            currentDraggedElement = null;
+        }
+
+        function proceedToNextPage() {
+            currentPageIndex++;
+
+            // !! --- FINAL REVEAL LOGIC --- !!
+            if (currentPageIndex === lastPageIndex && !celebrationActive) {
+                 console.log("Last card revealed!");
+                 triggerCelebration(); // Start fireworks, sparkles, confetti
+                 startEmojiRain();     // Start emoji rain
+
+                 // Add glow to last card
+                 lastPageElement.classList.add('glow-effect');
+
+                 // Darken background
+                 document.body.style.background = `var(--bg-dark)`;
+                 document.body.classList.add('final-state'); // Add class to body
+
+                 // --- Removed Music Player Logic ---
+
+                 if (instructions) instructions.classList.add('is-hidden'); // Hide instructions permanently now
+            }
+
+            makePageInteractive(currentPageIndex); // Set up next page (or stop if now on last page)
+        }
+
+
+        // --- Initialize & Event Listeners ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeStack();
+            resetButton.addEventListener('click', initializeStack);
+
+            // --- Removed Music Player Event Listeners ---
+
+        });
+
+        window.addEventListener('resize', () => {
+            stackAreaRect = stackArea.getBoundingClientRect();
+            // Canvas resizes handled by confetti library
+        });
+
+    </script>
+
+</body>
+</html>
